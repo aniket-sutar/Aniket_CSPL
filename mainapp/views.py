@@ -1,3 +1,4 @@
+import requests
 from functools import cache
 import json
 from django.http import JsonResponse
@@ -18,7 +19,8 @@ from datetime import timedelta
 from django.utils import timezone
 from .models import SystemUser,Roles
 from django.contrib.auth.hashers import make_password
-
+from django.template.loader import render_to_string
+from django.core.mail import EmailMessage
 
 class LoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
@@ -165,33 +167,64 @@ def send_otp(request):
         try:
             data = json.loads(request.body)
             email = data.get('email')
+
             if not email:
                 return JsonResponse({'error': 'Email is required'}, status=400)
 
-            # user = get_user_model().objects.filter(email=email).first()
             user = SystemUser.objects.filter(email=email).first()
             if not user:
                 return JsonResponse({'error': 'User not found'}, status=404)
 
             otp = get_random_string(length=6, allowed_chars='0123456789')
-            
             expiry_time = timezone.now() + timedelta(minutes=5)
 
             user.otp = otp
             user.expiry_time = expiry_time
             user.save()
 
-            send_mail(
-                'Your OTP Code',
-                f'Your OTP code is {otp}. It is valid for 5 minutes.',
-                'demomail1250@gmail.com',
-                [email],
-            )
+            attachment_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"  # Example file
+            response = requests.get(attachment_url)
+            if response.status_code == 200:
+                attachment_content = response.content
+                attachment_filename = "sample_attachment.pdf"
+            else:
+                return JsonResponse({'error': 'Failed to fetch attachment'}, status=500)
 
-            return JsonResponse({'message': 'OTP sent successfully'}, status=200)
+            if user.is_active:
+                html_content = render_to_string('otp_email_template.html', {
+                    'otp': otp,
+                    'expiry_time': '5 minutes',
+                    'username': user.username,  
+                })
+                email_message = EmailMessage(
+                    subject='Your OTP Code',
+                    body=html_content,
+                    from_email='your-email@gmail.com',
+                    to=[email],
+                )
+                email_message.content_subtype = 'html'
+            else:
+                html_content = render_to_string('non_active_email_template.html', {
+                    'username': user.username,
+                    'activation_link': f'http://yourwebsite.com/activate/'  # Replace with appropriate activation URL
+                })
+                email_message = EmailMessage(
+                    subject='Action Required: Activate Your Account',
+                    body=html_content,
+                    from_email='your-email@gmail.com',
+                    to=[email],
+                )
+                email_message.content_subtype = 'html'
+
+            email_message.attach(attachment_filename, attachment_content, "application/pdf")
+
+            email_message.send()
+
+            return JsonResponse({'message': 'Email sent successfully with attachment'}, status=200)
 
         except Exception as e:
             return JsonResponse({'error': f'Failed to process request: {str(e)}'}, status=500)
+
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @csrf_exempt
