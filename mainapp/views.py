@@ -66,28 +66,24 @@ def create_system_user(request):
         role_id = request.data.get('role_id')
         password = request.data.get('password')
 
-        # Basic validation
         if not all([username, email, mobile_no, role_id, password]):
             return Response({"error": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check for existing email or mobile
         if SystemUser.objects.filter(email=email).exists() or SystemUser.objects.filter(mobile_no=mobile_no).exists():
             return Response({"error": "Email or mobile number already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get role object
         try:
             role = Roles.objects.get(id=role_id)
         except Roles.DoesNotExist:
             return Response({"error": "Invalid role ID."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create user
         user = SystemUser.objects.create(
             username=username,
             email=email,
             mobile_no=mobile_no,
             profile_image=profile_image,
             role_id=role,
-            password=make_password(password)  # Hash the password
+            password=make_password(password)
         )
 
         return Response({
@@ -103,6 +99,8 @@ def create_system_user(request):
 def get_user(request, user_id):
     try:
         user = SystemUser.objects.get(id=user_id)
+        if user.is_deleted:
+            return Response({"message":"User not found"})
         return Response({
             "id": user.id,
             "username": user.username,
@@ -118,7 +116,8 @@ def get_user(request, user_id):
 def update_user(request, user_id):
     try:
         user = SystemUser.objects.get(id=user_id)
-        
+        if user.is_deleted:
+            return Response({"message":"User not found"})
         user.username = request.data.get('username', user.username)
         user.email = request.data.get('email', user.email)
         user.mobile_no = request.data.get('mobile_no', user.mobile_no)
@@ -145,22 +144,61 @@ def update_user(request, user_id):
 def delete_user(request, user_id):
     try:
         user = SystemUser.objects.get(id=user_id)
-        user.delete()
+
+        if user.is_deleted:
+            return Response({"message": "User is already deleted"})
+    
+        user.is_deleted = True
+        user.save()
+        # user.delete()
         return Response({"message": "User deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
     except SystemUser.DoesNotExist:
         return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
     
-    
-# @api_view(['GET'])
-# @permission_classes([permissions.IsAuthenticated])
-# def get_user(request, user_id):
-#     try:
-#         user = User.objects.get(id=user_id)
-#         print(user)
-#         return Response(SystemUserSerializer(user).data)
-#     except User.DoesNotExist:
-#         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-    
+@api_view(['GET'])
+def fetch_user_roles(request):
+    user_data = SystemUser.objects.select_related('role_id').all()
+    users_list = []
+    for user in user_data:
+        users_list.append({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "mobile_no": user.mobile_no,
+            "profile_image": user.profile_image.url if user.profile_image else None,
+            "role": user.role_id.name if user.role_id else None,
+        })
+    return Response(users_list)
+
+@api_view(['GET'])
+def role_specific_fetch_users_byname(request,name):
+    role_data = Roles.objects.get(name=name)
+    user_data = SystemUser.objects.filter(role_id=role_data.id)
+    user_list =[]
+    for user in user_data:
+        user_list.append({
+            "id":user.id,
+            "username": user.username,
+            "email": user.email,
+            "mobile_no": user.mobile_no,
+            "profile_image": user.profile_image.url if user.profile_image else None,
+        })
+    return Response(user_list)
+
+@api_view(['GET'])
+def role_specific_fetch_users_byid(request,id):
+    user_data = SystemUser.objects.filter(role_id=id)
+    user_list =[]
+    for user in user_data:
+        user_list.append({
+            "id":user.id,
+            "username": user.username,
+            "email": user.email,
+            "mobile_no": user.mobile_no,
+            "profile_image": user.profile_image.url if user.profile_image else None,
+        })
+    return Response(user_list)
+   
 @csrf_exempt
 def send_otp(request):
     if request.method == 'POST':

@@ -11,6 +11,9 @@ urlpatterns = [
     path('user-update/<int:user_id>/',views.update_user,name='update-user'),
     path('user-delete/<int:user_id>',views.delete_user,name='delete-user'),
 
+    path('user-roles-fetch',views.fetch_user_roles,name='user-roles-fetch'),
+    path('role-category-users/<int:id>/',views.role_specific_fetch_users_byid,name='role-category-user-byid'),
+    path('role-category-users/<str:name>/',views.role_specific_fetch_users_byname,name='role-category-users-byname'),
     # path('user/<int:user_id>/', views.get_user, name='get_user'),
 
     path('send-otp/',views.send_otp,name='send-otp'),

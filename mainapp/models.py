@@ -13,7 +13,8 @@ class SystemUser(User):
     otp = models.IntegerField(default=0)
     expiry_time = models.DateTimeField(default=timezone.now)
     profile_image = models.ImageField(upload_to='profile_image/')
-    role_id = models.ForeignKey(Roles, on_delete=models.CASCADE)
+    role_id = models.ForeignKey(Roles, on_delete=models.DO_NOTHING)
+    is_deleted = models.BooleanField(default=False)
 
 
 
