@@ -1,3 +1,4 @@
+import os
 import requests
 from functools import cache
 import json
@@ -17,10 +18,44 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model
 from datetime import timedelta
 from django.utils import timezone
-from .models import SystemUser,Roles
+from pos import settings
+from .models import SystemUser,Roles,Team,TeamJoin,Member,Product,Category,Department,Employee,Customer,PlaceOrder 
 from django.contrib.auth.hashers import make_password
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
+from django.views import View
+from django.forms.models import model_to_dict
+from django.shortcuts import get_object_or_404
+from rest_framework import viewsets
+from mainapp.serializers import ProductSerializer,CategorySerializer,DepartmentSerializer,EmployeeSerializer
+from rest_framework.decorators import action
+from rest_framework.viewsets import ModelViewSet
+from django_filters.rest_framework import DjangoFilterBackend
+from .filters import ProductFilter
+from rest_framework.filters import SearchFilter,OrderingFilter
+from rest_framework.pagination import PageNumberPagination
+import threading
+
+
+class DynamicPageNumberPagination(PageNumberPagination):
+    page_size_query_param = 'page_size'
+
+    def get_paginated_response(self, data):
+        return Response({
+            'current_page': self.page.number,
+            'total_pages': self.page.paginator.num_pages,
+            'total_items': self.page.paginator.count,
+            # 'page_size': self.page_size,
+            'results': data,
+        })
+
+class DepartmentView(ModelViewSet):
+    queryset = Department.objects.all()
+    serializer_class = DepartmentSerializer
+
+class EmployeeView(ModelViewSet):
+    queryset = Employee.objects.filter(is_active=True)
+    serializer_class = EmployeeSerializer
 
 class LoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
@@ -144,20 +179,16 @@ def update_user(request, user_id):
 def delete_user(request, user_id):
     try:
         user = SystemUser.objects.get(id=user_id)
-
         if user.is_deleted:
-            return Response({"message": "User is already deleted"})
-    
-        user.is_deleted = True
-        user.save()
-        # user.delete()
-        return Response({"message": "User deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+            return Response({"message": "User is already deleted."}, status=status.HTTP_400_BAD_REQUEST)
+        user.delete()
+        return Response({"message": "User soft-deleted successfully."}, status=status.HTTP_200_OK)
     except SystemUser.DoesNotExist:
         return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
     
 @api_view(['GET'])
 def fetch_user_roles(request):
-    user_data = SystemUser.objects.select_related('role_id').all()
+    user_data = SystemUser.objects.filter(is_deleted=False)
     users_list = []
     for user in user_data:
         users_list.append({
@@ -173,7 +204,7 @@ def fetch_user_roles(request):
 @api_view(['GET'])
 def role_specific_fetch_users_byname(request,name):
     role_data = Roles.objects.get(name=name)
-    user_data = SystemUser.objects.filter(role_id=role_data.id)
+    user_data = SystemUser.objects.filter(role_id=role_data.id,is_deleted=False)
     user_list =[]
     for user in user_data:
         user_list.append({
@@ -187,7 +218,7 @@ def role_specific_fetch_users_byname(request,name):
 
 @api_view(['GET'])
 def role_specific_fetch_users_byid(request,id):
-    user_data = SystemUser.objects.filter(role_id=id)
+    user_data = SystemUser.objects.filter(role_id=id,is_deleted=False)
     user_list =[]
     for user in user_data:
         user_list.append({
@@ -197,36 +228,27 @@ def role_specific_fetch_users_byid(request,id):
             "mobile_no": user.mobile_no,
             "profile_image": user.profile_image.url if user.profile_image else None,
         })
-    return Response(user_list)
-   
-@csrf_exempt
-def send_otp(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            email = data.get('email')
+    return Response(user_list)  
 
-            if not email:
-                return JsonResponse({'error': 'Email is required'}, status=400)
 
-            user = SystemUser.objects.filter(email=email).first()
-            if not user:
-                return JsonResponse({'error': 'User not found'}, status=404)
-
-            otp = get_random_string(length=6, allowed_chars='0123456789')
+def email_thread(user,otp,email):
+    try:
             expiry_time = timezone.now() + timedelta(minutes=5)
-
             user.otp = otp
             user.expiry_time = expiry_time
             user.save()
 
-            attachment_url = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"  # Example file
-            response = requests.get(attachment_url)
-            if response.status_code == 200:
-                attachment_content = response.content
-                attachment_filename = "sample_attachment.pdf"
-            else:
-                return JsonResponse({'error': 'Failed to fetch attachment'}, status=500)
+            pdf_path = os.path.join(settings.BASE_DIR, 'static', 'pdf', 'blankpdf.pdf')
+
+            if not os.path.exists(pdf_path):
+                return JsonResponse({'error': 'Static PDF file not found'}, status=500)
+
+            if not os.path.exists(pdf_path):
+                return JsonResponse({'error': 'Static PDF file not found'}, status=500)
+
+            with open(pdf_path, 'rb') as pdf_file:
+                attachment_content = pdf_file.read()
+                attachment_filename = "blankpdf.pdf"
 
             if user.is_active:
                 html_content = render_to_string('otp_email_template.html', {
@@ -257,6 +279,29 @@ def send_otp(request):
             email_message.attach(attachment_filename, attachment_content, "application/pdf")
 
             email_message.send()
+    except Exception as e:
+        JsonResponse({"error":"Error is found when sending mail"})
+
+
+@api_view((['POST']))
+def send_otp(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            email = data.get('email')
+
+            if not email:
+                return JsonResponse({'error': 'Email is required'}, status=400)
+
+            user = SystemUser.objects.filter(email=email).first()
+            if not user:
+                user=User.objects.filter(email=email).first()
+                if not user:
+                    return JsonResponse({'error': 'User not found'}, status=404)
+
+            otp = get_random_string(length=6, allowed_chars='0123456789')
+
+            threading.Thread(target=email_thread,args=(user,otp,email)).start()
 
             return JsonResponse({'message': 'Email sent successfully with attachment'}, status=200)
 
@@ -299,3 +344,392 @@ def verify_otp(request):
             return JsonResponse({'error': f'Failed to process request: {str(e)}'}, status=500)
     
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+class RolesCRUD(APIView):
+    def get(self,request,id=None):
+        if id:
+            # role = get_object_or_404(Roles,id=id)
+            # role = Roles.objects.get(id=id)
+            role = Roles.objects.filter(id=id, is_deleted=False).get()
+            return JsonResponse(model_to_dict(role))
+        # rolealldata = Roles.objects.all()
+        rolealldata = Roles.objects.filter(is_deleted=False)
+        role_list = list(rolealldata.values())
+        return JsonResponse(role_list,safe=False)
+    
+    def post(self,request):
+        try:
+            data = json.loads(request.body)
+            name = data.get('name')
+            if not name:
+                return Response({"message":"Name is required provide it"})
+            data = Roles.objects.create(name=name)
+            return JsonResponse(model_to_dict(data),status=201)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    def put(self,request,id):
+        roledata = get_object_or_404(Roles,id=id)
+        try:
+            if roledata is None:
+                return Response("Your are not providing the id")
+            data = json.loads(request.body)
+            name = data.get("name")
+            isactive = data.get("is_active")
+            if name is not None:
+                roledata.name=name
+            if isactive is not None:
+                roledata.is_active=isactive
+            roledata.save()
+            return JsonResponse(model_to_dict(roledata))
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        
+    def delete(self,request,id):
+        role_data = get_object_or_404(Roles,id=id)
+        role_data.delete()
+        return Response("Role is deleted successfully")    
+    
+# class Tagcreate(APIView):
+#     def post(self,request,*args, **kwargs):
+#         name = request.data.get('name')
+#         if name is None:
+#             return JsonResponse({"Error":"Provide valid tag name for creation"})
+#         tag = Tag.objects.create(name=name)
+#         return JsonResponse({"message":"Tag added successfully"})
+
+#     def get(self,request):
+#         try:
+#             data = Tag.objects.all()
+#             tag_data = list(data.values())
+#             return JsonResponse(tag_data,safe=False)
+#         except:
+#             return Response("Data not found")
+        
+# class ProductView(APIView):
+#     def post(self, request, *args, **kwargs):
+#         data = json.loads(request.body)
+        
+#         name = data.get("name")
+#         desc = data.get("description")
+#         tags = data.get("tags", [])
+        
+#         if not name or not desc:
+#             return JsonResponse({"error": "Both 'name' and 'description' are required fields"}, status=400)
+        
+#         tag_objects = Tag.objects.filter(id__in=tags)
+#         if len(tag_objects) != len(tags):
+#             return JsonResponse({"error": "One or more tags do not exist"}, status=400)
+        
+#         product = Product.objects.create(name=name, desc=desc)
+#         product.tags.set(tag_objects)
+
+#         return JsonResponse({
+#             "id": product.id,
+#             "name": product.name,
+#             "description": product.desc,
+#             "tags": list(product.tags.values_list("id","name"))
+#         }, status=201)
+    
+#     def get(self, request, *args, **kwargs):
+#         products = Product.objects.prefetch_related('tags').all()
+#         product_list = []
+
+#         for product in products:
+#             product_list.append({
+#                 "id": product.id,
+#                 "name": product.name,
+#                 "description": product.desc,
+#                 "tags": [tag.name for tag in product.tags.all()]
+#             })
+
+#         return JsonResponse(product_list, safe=False)
+    
+#     def put(self, request, product_id, *args, **kwargs):
+#         product = get_object_or_404(Product, id=product_id)
+#         data = json.loads(request.body)
+
+#         product.name = data.get("name", product.name)
+#         product.desc = data.get("description", product.desc)
+
+#         tags = data.get("tags", [])
+#         if tags:
+#             tag_objects = Tag.objects.filter(name__in=tags)
+#             if len(tag_objects) != len(tags):
+#                 return JsonResponse({"error": "One or more tags do not exist"}, status=400)
+#             product.tags.set(tag_objects)
+
+#         product.save()
+
+#         return JsonResponse({
+#             "id": product.id,
+#             "name": product.name,
+#             "description": product.desc,
+#             "tags": list(product.tags.values_list("name", flat=True))
+#         })
+    
+@api_view(['POST'])
+def update_team_members(request):
+    team_name = request.data.get("team")
+    members = request.data.get("members")
+
+    if team_name is None or members is None:
+        return Response({"Error":"Provide team and team members "})
+    
+    # team = Team.objects.get_or_create(name=team_name)
+    team, created = Team.objects.get_or_create(name=team_name)
+
+
+    old_team_members = TeamJoin.objects.filter(team=team)
+    members_dict = {}
+
+    for team_member in old_team_members:
+        member_name = team_member.member.name
+        members_dict[member_name] = team_member
+
+    incoming_member=[]
+    for member_data in members:
+        name = member_data.get("name")
+        points = member_data.get("points") 
+
+        if name is None or points is None:
+            continue
+
+        incoming_member.append(name)
+
+        if name in members_dict:
+            team_join = members_dict[name]
+            if team_join.points != points:
+                team_join.points = points
+                team_join.save()
+        else:
+            # member = Member.objects.get_or_create(name=name)
+            member, _ = Member.objects.get_or_create(name=name)
+    
+            TeamJoin.objects.create(team=team,member=member,points=points)
+    
+    for member_name, team_join in members_dict.items():
+        if member_name not in incoming_member:
+            team_join.delete()
+
+    return Response({"message": "Team members updated successfully."})
+
+@api_view(['GET'])
+def get_all_teams_and_members(request):
+    teams = Team.objects.all()
+    result = []
+    for team in teams:
+        team_data = {"team": team.name, "members": []}
+        team_joins = TeamJoin.objects.filter(team=team).select_related('member')
+        for join in team_joins:
+            team_data["members"].append({
+                "name": join.member.name,
+                "points": join.points
+            })
+        result.append(team_data)
+    return Response(result)
+
+class ProductViewset(viewsets.ViewSet):
+    def list(self, request):
+        data = request.GET.get('sort',None)
+        products = Product.objects.all()
+
+        name = request.GET.get('name', None)
+        price = request.GET.get('price', None)
+        is_active = request.GET.get('is_active', None)
+        
+        if name is not None:
+            products = products.filter(prod_name__icontains = name)
+
+        if price is not None:
+            try:
+                price = int(price)
+                products = products.filter(price = price)
+            except ValueError:
+                return Response({"error": "Invalid price format"}, status=400)
+
+        if is_active is not None:
+            try:
+                is_active = bool(int(is_active))
+                products = products.filter(is_active=is_active)
+            except ValueError:
+                return Response({"error": "is_active must be 0 or 1"}, status=400)
+
+        if data == "desc":
+            products = products.order_by('-price')
+        else:
+            products = products.order_by('price')
+        
+        # serializer = ProductSerializer(products, many=True)
+        # return Response(serializer.data)
+
+        paginator = DynamicPageNumberPagination()
+        paginated_products = paginator.paginate_queryset(products, request)
+
+        serializer = ProductSerializer(paginated_products, many=True)
+        return paginator.get_paginated_response(serializer.data)
+    
+    def create(self, request):
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def retrieve(self, request, pk=None):
+        try:
+            product = Product.objects.get(pk=pk)
+        except Product.DoesNotExist:
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ProductSerializer(product)
+        return Response(serializer.data)
+
+    def destroy(self , request , pk=None):
+        try:
+            product = Product.objects.get(pk=pk)
+        except Product.DoesNotExist:
+            return Response({"error":"Product not found"}, status=status.HTTP_404_NOT_FOUND)
+        product.delete()
+        return Response({"Message":"Your data is successfully deleted"})
+    
+    def update(self , request , pk=None):
+        try:
+            product = Product.objects.get(pk=pk)
+        except Product.DoesNotExist:
+            return Response({"error":"Product not found"},status=status.HTTP_404_NOT_FOUND)
+        serializer = ProductSerializer(product,data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors)
+    
+    def partial_update(self , request , pk=None):
+        try:
+            product = Product.objects.get(pk=pk)
+        except Product.DoesNotExist:
+            return Response({"error":"Product not found"},status=status.HTTP_404_NOT_FOUND)
+        serializer = ProductSerializer(product,data=request.data,partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors)
+
+class CategoryViewset(viewsets.ViewSet):
+    def list(self,request):
+        category = Category.objects.all()
+        name = request.query_params.get('name', None)
+        is_active = request.query_params.get('is_active', None)
+
+        if name is not None:
+            categories = categories.filter(cat_name__icontains=name)  # Search by category name (case-insensitive)
+        
+        if is_active is not None:
+            categories = categories.filter(is_active=is_active)  # Filter by is_active status
+
+        serializer = CategorySerializer(category,many=True)
+        return Response(serializer.data)
+    
+    def create(self,request):
+        serializer = CategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors)
+    
+    def update(self,request,pk=None):
+        try:
+            category = Category.objects.get(id=pk)
+        except Category.DoesNotExist:
+            return Response({"error":"Category not found"})
+        serializer = CategorySerializer(category,data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors)
+    
+    def destroy(self,request,pk=None):
+        try:
+            category = Category.objects.get(id=pk)
+        except Category.DoesNotExist:
+            return Response({"error":"Category not found"})
+        category.delete()
+        return Response("Your data deleted successfully")
+    
+    def partial_update(self,request,pk=None):
+        try:
+            category = Category.objects.get(id=pk)
+        except Category.DoesNotExist:
+            return Response({"error":"Category not found"})
+        serializer = CategorySerializer(category,data=request.data,partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors)
+    
+class ProductModelViewset(ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    filter_backends = [DjangoFilterBackend,SearchFilter,OrderingFilter]
+    filterset_class = ProductFilter
+    pagination_class = DynamicPageNumberPagination
+
+    search_fields = ['name']
+    ordering_fields = ['price', 'name']
+
+@api_view(['GET'])
+def ProductPaginationData(request):
+    products = Product.objects.all()
+    paginator = DynamicPageNumberPagination()
+
+    paginated_products = paginator.paginate_queryset(products, request)
+
+    serializer = ProductSerializer(paginated_products, many=True)
+    return paginator.get_paginated_response(serializer.data)
+
+# @api_view(['POST'])
+
+class PlacedOrderView(APIView):
+    def post(self, request):
+        try:
+            data = request.data
+            order_status = data.get('order_status', 'PENDING')
+            customer_id = data.get('cust_id')
+            product_id = data.get('prod_id')
+            quantity = data.get('quantity')
+            discount = data.get('discount', 0)
+            payment_type = data.get('payment_type')
+
+            if not customer_id or not product_id or not quantity or not payment_type:
+                return JsonResponse({"error": "Missing required fields"}, status=400)
+
+            try:
+                customer = Customer.objects.get(id=customer_id)
+            except Customer.DoesNotExist:
+                return JsonResponse({'error': 'Customer not found'}, status=404)
+
+            try:
+                product = Product.objects.get(id=product_id)
+            except Product.DoesNotExist:
+                return JsonResponse({'error': 'Product not found'}, status=404)
+
+            # Calculate the order details
+            amount = product.price
+            delivery_charges = 50 if payment_type in ['ONLINE', 'COD'] else 0
+            discount_amount = (discount * (amount * quantity)) / 100
+            total_amount = (amount * quantity) + delivery_charges - discount_amount
+
+            # Create the order
+            placeorder=PlaceOrder.objects.create(
+                order_status=order_status,
+                cust_id=customer,
+                prod_id=product,
+                quantity=quantity,
+                amount=amount,
+                total_amount=total_amount,
+                delivery_charges=delivery_charges,
+                discount=discount,
+                payment_type=payment_type
+            )
+            return Response({"message": "Your order is confirmed!"}, status=201)
+        except Exception as e:
+            return Response({"error": f"An error occurred: {str(e)}"}, status=500)

@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import LoginView,RoleCreateView
+from .views import LoginView,RoleCreateView,RolesCRUD,PlacedOrderView
 from mainapp import views
 
 urlpatterns = [
@@ -18,4 +18,17 @@ urlpatterns = [
 
     path('send-otp/',views.send_otp,name='send-otp'),
     path('verify-otp/',views.verify_otp,name='verify-otp'),
+
+    path('role/',RolesCRUD.as_view(),name='roleread'),
+    path('role/<int:id>/',RolesCRUD.as_view(),name='role-get-delete'),
+
+    # path('tag-create/',Tagcreate.as_view(),name='tag-create'),
+    # path('product-create/',ProductView.as_view(),name='product-create'),
+    # path('product-update/<int:product_id>/',ProductView.as_view(),name='product-update'),
+    path('update-team-members/',views.update_team_members,name='update-team-members'),
+    path('alldata/',views.get_all_teams_and_members,name='alldata'),
+
+    path('prod-fun-pagination/',views.ProductPaginationData,name='prod-fun-pagination'),
+
+    path('place-order/',PlacedOrderView.as_view(),name='place-order'),
 ]
