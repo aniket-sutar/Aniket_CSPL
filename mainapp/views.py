@@ -36,6 +36,11 @@ from rest_framework.filters import SearchFilter,OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 import threading
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 
 class DynamicPageNumberPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
@@ -733,3 +738,26 @@ class PlacedOrderView(APIView):
             return Response({"message": "Your order is confirmed!"}, status=201)
         except Exception as e:
             return Response({"error": f"An error occurred: {str(e)}"}, status=500)
+        
+class OrderHistory(APIView):
+    def get(self,request):
+        order = PlaceOrder.objects.all()
+        i=1
+        print(order)
+        allorder = []
+        for single_order in order:
+            cust_detail = single_order.cust_id
+            prod_detail = single_order.prod_id
+
+            allorder.append({f'Order {i}':{
+                "customer_name": cust_detail.cust_name,
+                "customer_address": cust_detail.cust_address,
+                "product_name": prod_detail.prod_name,
+                "amount": single_order.amount,
+                "quantity": single_order.quantity,
+                "total_amount": single_order.total_amount,
+                "payment_type": single_order.payment_type,
+                "payment_date": single_order.payment_date,
+            }})
+            i=i+1
+        return Response(allorder)

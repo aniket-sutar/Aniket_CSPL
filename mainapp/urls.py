@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import LoginView,RoleCreateView,RolesCRUD,PlacedOrderView
+from .views import LoginView,RoleCreateView,RolesCRUD,PlacedOrderView,OrderHistory
 from mainapp import views
 
 urlpatterns = [
@@ -31,4 +31,5 @@ urlpatterns = [
     path('prod-fun-pagination/',views.ProductPaginationData,name='prod-fun-pagination'),
 
     path('place-order/',PlacedOrderView.as_view(),name='place-order'),
+    path('order-history/',OrderHistory.as_view(),name='order-history'),
 ]
