@@ -19,7 +19,7 @@ from django.contrib.auth import get_user_model
 from datetime import timedelta
 from django.utils import timezone
 from pos import settings
-from .models import SystemUser,Roles,Team,TeamJoin,Member,Product,Category,Department,Employee,Customer,PlaceOrder 
+from .models import SystemUser,Roles,Team,TeamJoin,Member,Product,Category,Department,Employee,Customer,PlaceOrder,Blog
 from django.contrib.auth.hashers import make_password
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
@@ -27,7 +27,7 @@ from django.views import View
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
-from mainapp.serializers import ProductSerializer,CategorySerializer,DepartmentSerializer,EmployeeSerializer
+from mainapp.serializers import ProductSerializer,CategorySerializer,DepartmentSerializer,EmployeeSerializer,BlogSerializer
 from rest_framework.decorators import action
 from rest_framework.viewsets import ModelViewSet
 from django_filters.rest_framework import DjangoFilterBackend
@@ -35,12 +35,7 @@ from .filters import ProductFilter
 from rest_framework.filters import SearchFilter,OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 import threading
-
-import logging
-
-logger = logging.getLogger(__name__)
-
-
+from .models import ParentChildCategory,ParentChildProduct
 
 class DynamicPageNumberPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
@@ -235,7 +230,6 @@ def role_specific_fetch_users_byid(request,id):
         })
     return Response(user_list)  
 
-
 def email_thread(user,otp,email):
     try:
             expiry_time = timezone.now() + timedelta(minutes=5)
@@ -286,7 +280,6 @@ def email_thread(user,otp,email):
             email_message.send()
     except Exception as e:
         JsonResponse({"error":"Error is found when sending mail"})
-
 
 @api_view((['POST']))
 def send_otp(request):
@@ -395,84 +388,7 @@ class RolesCRUD(APIView):
         role_data.delete()
         return Response("Role is deleted successfully")    
     
-# class Tagcreate(APIView):
-#     def post(self,request,*args, **kwargs):
-#         name = request.data.get('name')
-#         if name is None:
-#             return JsonResponse({"Error":"Provide valid tag name for creation"})
-#         tag = Tag.objects.create(name=name)
-#         return JsonResponse({"message":"Tag added successfully"})
 
-#     def get(self,request):
-#         try:
-#             data = Tag.objects.all()
-#             tag_data = list(data.values())
-#             return JsonResponse(tag_data,safe=False)
-#         except:
-#             return Response("Data not found")
-        
-# class ProductView(APIView):
-#     def post(self, request, *args, **kwargs):
-#         data = json.loads(request.body)
-        
-#         name = data.get("name")
-#         desc = data.get("description")
-#         tags = data.get("tags", [])
-        
-#         if not name or not desc:
-#             return JsonResponse({"error": "Both 'name' and 'description' are required fields"}, status=400)
-        
-#         tag_objects = Tag.objects.filter(id__in=tags)
-#         if len(tag_objects) != len(tags):
-#             return JsonResponse({"error": "One or more tags do not exist"}, status=400)
-        
-#         product = Product.objects.create(name=name, desc=desc)
-#         product.tags.set(tag_objects)
-
-#         return JsonResponse({
-#             "id": product.id,
-#             "name": product.name,
-#             "description": product.desc,
-#             "tags": list(product.tags.values_list("id","name"))
-#         }, status=201)
-    
-#     def get(self, request, *args, **kwargs):
-#         products = Product.objects.prefetch_related('tags').all()
-#         product_list = []
-
-#         for product in products:
-#             product_list.append({
-#                 "id": product.id,
-#                 "name": product.name,
-#                 "description": product.desc,
-#                 "tags": [tag.name for tag in product.tags.all()]
-#             })
-
-#         return JsonResponse(product_list, safe=False)
-    
-#     def put(self, request, product_id, *args, **kwargs):
-#         product = get_object_or_404(Product, id=product_id)
-#         data = json.loads(request.body)
-
-#         product.name = data.get("name", product.name)
-#         product.desc = data.get("description", product.desc)
-
-#         tags = data.get("tags", [])
-#         if tags:
-#             tag_objects = Tag.objects.filter(name__in=tags)
-#             if len(tag_objects) != len(tags):
-#                 return JsonResponse({"error": "One or more tags do not exist"}, status=400)
-#             product.tags.set(tag_objects)
-
-#         product.save()
-
-#         return JsonResponse({
-#             "id": product.id,
-#             "name": product.name,
-#             "description": product.desc,
-#             "tags": list(product.tags.values_list("name", flat=True))
-#         })
-    
 @api_view(['POST'])
 def update_team_members(request):
     team_name = request.data.get("team")
@@ -691,8 +607,6 @@ def ProductPaginationData(request):
     serializer = ProductSerializer(paginated_products, many=True)
     return paginator.get_paginated_response(serializer.data)
 
-# @api_view(['POST'])
-
 class PlacedOrderView(APIView):
     def post(self, request):
         try:
@@ -761,3 +675,34 @@ class OrderHistory(APIView):
             }})
             i=i+1
         return Response(allorder)
+    
+class BlogViewSet(ModelViewSet):
+    queryset = Blog.objects.all()
+    serializer_class = BlogSerializer
+    
+    def get_queryset(self):
+        slug = self.request.GET.get('slug', None)
+        if slug:
+            return Blog.objects.filter(slug=slug)
+        else:
+            return Blog.objects.all()
+
+class DisplayProductByCategory(APIView):
+    def get(self, request, id=None):
+        if not id:
+            return JsonResponse({"error": "You did not provide a valid ID."}, status=400)
+        try:
+            parent_category = ParentChildCategory.objects.get(id=id)
+            print(f'parent category = {parent_category}')
+            subcategories = ParentChildCategory.objects.filter(parent=parent_category)
+            print(f'subcategories ={list(subcategories)}')
+            categories = [parent_category] + list(subcategories)
+            print(f'categories ={categories}')
+            products = ParentChildProduct.objects.filter(cat__in=categories).values('id', 'name', 'price', 'cat__name')
+
+            return JsonResponse({
+                "parent_category": parent_category.name,
+                "products": list(products)
+            })
+        except ParentChildCategory.DoesNotExist:
+            return JsonResponse({"error": "Invalid category ID provided."}, status=404)

@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth.models import User,Group
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+from django.utils.text import slugify
+
 
 class NonDeletedManager(models.Manager):
     def get_queryset(self):
@@ -33,27 +35,6 @@ class SystemUser(User,SoftDeleteModel):
     profile_image = models.ImageField(upload_to='profile_image/')
     role_id = models.ForeignKey(Roles, on_delete=models.DO_NOTHING) 
 
-# class Tag(models.Model):
-#     tag_name = models.CharField(max_length=80, unique=True)
-
-#     def __str__(self):
-#         return f"{self.tag_name}"
-
-# class Product(models.Model):
-#     prod_name = models.CharField(max_length=50)
-#     prod_desc = models.TextField()
-
-#     def __str__(self):
-#         return self.prod_name
-
-# class ProductTagJoin(models.Model):
-#     tag = models.ForeignKey(Tag, on_delete=models.DO_NOTHING, related_name="product_tags")
-#     product = models.ForeignKey(Product, on_delete=models.DO_NOTHING, related_name="tagged_products")
-#     is_active = models.BooleanField(default=True)
-
-#     def __str__(self):
-#         return f"{self.product.prod_name} tagged with {self.tag.tag_name}"
-    
 class Member(SoftDeleteModel):
     name = models.CharField(max_length=255, unique=True)
 
@@ -137,5 +118,44 @@ class PlaceOrder(SoftDeleteModel):
     delivery_charges = models.IntegerField()
     discount = models.DecimalField(max_digits=4,decimal_places=2)
     payment_date = models.DateTimeField(auto_now_add=True)
-    
 
+
+class Blog(SoftDeleteModel):
+    status_choice =[
+        ('draft','Draft'),
+        ('published','Published')
+    ]
+
+    title = models.CharField(max_length=150,unique=True)
+    slug = models.SlugField(max_length=150,unique=True,blank=True)
+    author = models.ForeignKey(User,on_delete=models.DO_NOTHING,null=True,blank=True)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    status = models.CharField(max_length=30,choices=status_choice,default='draft')
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.title)
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return self.title
+
+class ParentChildCategory(SoftDeleteModel):
+    name = models.CharField(max_length=50)
+    desc = models.TextField()
+    parent = models.ForeignKey('self',on_delete=models.DO_NOTHING,null=True,blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+class ParentChildProduct(SoftDeleteModel):
+    name = models.CharField(max_length=50)
+    price = models.IntegerField()
+    cat = models.ForeignKey(ParentChildCategory,on_delete=models.DO_NOTHING,null=True,blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name

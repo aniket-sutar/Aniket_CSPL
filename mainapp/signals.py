@@ -19,6 +19,6 @@ def send_message_channel(sender,instance,created ,**kwargs):
                     "notifications",
                     {
                         "type": "send_notification",
-                        "message": f"Order placed successfully!",
+                        "message": f"Hurrah!....Your order placed successfully!",
                     }
                 )

@@ -1,6 +1,12 @@
-from django.urls import path
-from .views import LoginView,RoleCreateView,RolesCRUD,PlacedOrderView,OrderHistory
+from django.urls import path,include
+from .views import LoginView,RoleCreateView,RolesCRUD,PlacedOrderView,OrderHistory,BlogViewSet,DisplayProductByCategory
 from mainapp import views
+from rest_framework import routers
+
+
+blog_router = routers.DefaultRouter()
+blog_router.register(r'blogs', BlogViewSet, basename='blog')
+
 
 urlpatterns = [
     path('login/',LoginView.as_view(),name='login'),
@@ -32,4 +38,7 @@ urlpatterns = [
 
     path('place-order/',PlacedOrderView.as_view(),name='place-order'),
     path('order-history/',OrderHistory.as_view(),name='order-history'),
+
+    path('blog/',include(blog_router.urls)),
+    path('parentchild/<int:id>/',DisplayProductByCategory.as_view(),name='parentchild'),
 ]

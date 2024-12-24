@@ -168,8 +168,20 @@ CHANNEL_LAYERS = {
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+# STATIC_URL = 'static/'
+# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+# STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+STATIC_URL = '/static/'
+
+# Directory where collectstatic will gather all static files for production
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# List of directories where Django will look for additional static files during development
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),  # Custom static files
+]
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import SystemUser, Roles ,Product,Category,Department,Employee
+from .models import SystemUser, Roles ,Product,Category,Department,Employee,Blog
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,12 +26,6 @@ class SystemUserSerializer(serializers.ModelSerializer):
         return user
     
 class ProductSerializer(serializers.ModelSerializer):
-    # id = serializers.IntegerField(read_only=True)  
-    # prod_name = serializers.CharField(max_length=50)
-    # price = serializers.IntegerField()
-    # desc = serializers.CharField(read_only=True)
-
-    # desc = serializers.CharField(read_only=True) 
     class Meta:
         model = Product
         fields = ('id','prod_name','price','desc')
@@ -61,3 +55,21 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ('id','emp_name','emp_age','dept_name')
+
+
+class BlogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Blog
+        fields = ('id','title','slug','author','content','created_at','updated_at','status')
+        # read_only_fields = ('id','slug','author','created_at','updated_at')
+    
+    def create(self, validated_data):
+        user = self.context['request'].user
+        blog = Blog.objects.create(author=user, **validated_data)
+        return blog
+
+    def update(self, instance, validated_data):
+        user = self.context['request'].user
+        instance.author = user
+        return super().update(instance, validated_data)
+    

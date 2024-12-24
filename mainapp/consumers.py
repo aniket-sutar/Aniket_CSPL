@@ -38,13 +38,11 @@ class OrderNotificationConsumer(AsyncWebsocketConsumer):
         )
 
     async def receive(self, text_data):
-        # Parse incoming data
         data = json.loads(text_data)
         message = data.get('message', 'No message received')
         
         if message:
             try:
-                # Send a confirmation or process the message if needed
                 await self.channel_layer.group_send(
                     self.group_name,
                     {
