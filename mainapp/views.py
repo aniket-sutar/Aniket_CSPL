@@ -40,7 +40,7 @@ from django.shortcuts import HttpResponse
 
 
 def Home(request):
-    return HttpResponse('Welcome To Home...!')
+    return render(request,'home.html')
 
 class DynamicPageNumberPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
