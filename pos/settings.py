@@ -35,7 +35,7 @@ DEBUG = 'RENDER' not in os.environ
 
 # Add the public URL to ALLOWED_HOSTS
 ALLOWED_HOSTS = [
-    "your-render-domain.onrender.com",
+    "cspl-project.onrender.com",
     "localhost",
     "127.0.0.1",
     "0.0.0.0"
