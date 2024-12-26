@@ -17,7 +17,6 @@ admin.site.register(Customer)
 admin.site.register(PlaceOrder)
 
 
-
 @admin.register(Blog)
 class BlogAdmin(admin.ModelAdmin):
     fields = ('title', 'slug', 'author', 'content', 'status', 'created_at', 'updated_at')

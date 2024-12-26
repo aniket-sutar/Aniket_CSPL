@@ -159,3 +159,4 @@ class ParentChildProduct(SoftDeleteModel):
 
     def __str__(self):
         return self.name
+

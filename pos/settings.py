@@ -12,10 +12,11 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
-
+# from pyngrok import ngrok,conf
+import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+# conf.get_default().auth_token = "2qjt4YMhGS1SdUW8bsWsO8VQK26_6SjtB6EgYQjfh82oWAXNg"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -24,12 +25,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-z01sspkmw#gr+38kr%134nr7+7_77saul$9gn9fr-@d59rs8m%'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = 'RENDER' not in os.environ
 
+# from pyngrok import ngrok
+
+# # Generate the ngrok tunnel
+# public_url = ngrok.connect(8080).public_url
+# print(f"ngrok URL: {public_url}")
+
+# Add the public URL to ALLOWED_HOSTS
 ALLOWED_HOSTS = []
-
-
-# Application definition
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME') if RENDER_EXTERNAL_HOSTNAME:    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 INSTALLED_APPS = [
     'channels',
@@ -87,15 +93,20 @@ ASGI_APPLICATION = "pos.asgi.application"
 #     }
 # }
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'restaurant',           
+#         'USER': 'postgres',      
+#         'PASSWORD': 'postgres',    
+#         'HOST': 'localhost',            
+#         'PORT': '5432',                
+#     }
+# }
+
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'restaurant',           
-        'USER': 'postgres',      
-        'PASSWORD': 'postgres',    
-        'HOST': 'localhost',            
-        'PORT': '5432',                
-    }
+    "default": dj_database_url.parse("postgresql://cspl_task_user:LHrzERAB1iTKTNXzBaa3IRUUVUowbhfe@dpg-ctmgejq3esus739ougag-a.oregon-postgres.render.com/cspl_task")
 }
 
 # AUTH_USER_MODEL = 'mainapp.SystemUser'

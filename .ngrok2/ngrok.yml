@@ -1,0 +1,8 @@
+# authtoken: 2qjt4YMhGS1SdUW8bsWsO8VQK26_6SjtB6EgYQjfh82oWAXNg
+# tunnels:
+#   app1:
+#     proto: http
+#     addr: 8080
+#   app2:
+#     proto: http
+#     addr: 8000

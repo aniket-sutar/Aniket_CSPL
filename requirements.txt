@@ -10,6 +10,7 @@ click==8.1.7
 constantly==23.10.4
 cryptography==44.0.0
 daphne==4.1.2
+dj-database-url==2.3.0
 Django==5.1.4
 django-filter==24.3
 django-redis==5.4.0
@@ -30,7 +31,9 @@ psycopg2-binary==2.9.10
 pyasn1==0.6.1
 pyasn1_modules==0.4.1
 pycparser==2.22
+pyngrok==7.2.2
 pyOpenSSL==24.3.0
+PyYAML==6.0.2
 redis==5.2.1
 requests==2.32.3
 service-identity==24.2.0
