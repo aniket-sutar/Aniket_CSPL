@@ -34,11 +34,13 @@ DEBUG = 'RENDER' not in os.environ
 # print(f"ngrok URL: {public_url}")
 
 # Add the public URL to ALLOWED_HOSTS
-ALLOWED_HOSTS = []
-RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
-if RENDER_EXTERNAL_HOSTNAME:
-    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
-    
+ALLOWED_HOSTS = [
+    "your-render-domain.onrender.com",
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0"
+]
+
 INSTALLED_APPS = [
     'channels',
     'django.contrib.admin',
