@@ -36,6 +36,11 @@ from rest_framework.filters import SearchFilter,OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 import threading
 from .models import ParentChildCategory,ParentChildProduct
+from django.shortcuts import HttpResponse
+
+
+def Home(request):
+    return HttpResponse('Welcome To Home...!')
 
 class DynamicPageNumberPagination(PageNumberPagination):
     page_size_query_param = 'page_size'

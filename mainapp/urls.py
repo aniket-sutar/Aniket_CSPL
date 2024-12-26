@@ -9,6 +9,8 @@ blog_router.register(r'blogs', BlogViewSet, basename='blog')
 
 
 urlpatterns = [
+    path('',views.Home,name='home'),
+
     path('login/',LoginView.as_view(),name='login'),
     path('role-create/',RoleCreateView.as_view(),name='role-create'),
 
