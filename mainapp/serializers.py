@@ -29,7 +29,7 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ('id','prod_name','price','desc')
-        # read_only_fields = ('desc',)
+        read_only_fields = ('desc',)
 
 class CategorySerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)

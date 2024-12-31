@@ -25,7 +25,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-z01sspkmw#gr+38kr%134nr7+7_77saul$9gn9fr-@d59rs8m%'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = 'RENDER' not in os.environ
+# DEBUG = 'RENDER' not in os.environ
+DEBUG = True
 
 # from pyngrok import ngrok
 
@@ -97,24 +98,24 @@ ASGI_APPLICATION = "pos.asgi.application"
 #     }
 # }
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'restaurant',           
-#         'USER': 'postgres',      
-#         'PASSWORD': 'postgres',    
-#         'HOST': 'localhost',            
-#         'PORT': '5432',                
-#     }
-# }
-
-
 DATABASES = {
-    "default": dj_database_url.parse("postgresql://cspl_task_user:LHrzERAB1iTKTNXzBaa3IRUUVUowbhfe@dpg-ctmgejq3esus739ougag-a.oregon-postgres.render.com/cspl_task")
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'restaurant',           
+        'USER': 'postgres',      
+        'PASSWORD': 'postgres',    
+        'HOST': 'localhost',            
+        'PORT': '5432',                
+    }
 }
 
-# AUTH_USER_MODEL = 'mainapp.SystemUser'
 
+# DATABASES = {
+#     "default": dj_database_url.parse("postgresql://cspl_task_user:LHrzERAB1iTKTNXzBaa3IRUUVUowbhfe@dpg-ctmgejq3esus739ougag-a.oregon-postgres.render.com/cspl_task")
+# }
+
+# AUTH_USER_MODEL = 'mainapp.SystemUser'
+USE_TZ = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
@@ -167,7 +168,7 @@ CACHES = {
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'  # Replace with your local time zone
 
 USE_I18N = True
 
@@ -183,19 +184,19 @@ CHANNEL_LAYERS = {
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-# STATIC_URL = 'static/'
-# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+STATIC_URL = 'static/'
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+# STATIC_URL = '/static/'
+
+# # Directory where collectstatic will gather all static files for production
 # STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
-STATIC_URL = '/static/'
-
-# Directory where collectstatic will gather all static files for production
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# List of directories where Django will look for additional static files during development
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),  # Custom static files
-]
+# # List of directories where Django will look for additional static files during development
+# STATICFILES_DIRS = [
+#     'static'  # Custom static files
+# ]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

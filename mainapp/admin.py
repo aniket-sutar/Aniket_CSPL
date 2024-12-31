@@ -14,8 +14,14 @@ admin.site.register(CategoryProduct)
 admin.site.register(Department)
 admin.site.register(Employee)
 admin.site.register(Customer)
-admin.site.register(PlaceOrder)
+# admin.site.register(PlaceOrder)
 
+@admin.register(PlaceOrder)
+class PlaceOrderAdmin(admin.ModelAdmin):
+    fields = ('id','order_status','cust_id','prod_id','quantity','amount','total_amount','delivery_charges','discount','payment_date')
+    readonly_fields = ('id','payment_date',)
+
+    list_display = ('id','cust_id','prod_id','quantity','total_amount')
 
 @admin.register(Blog)
 class BlogAdmin(admin.ModelAdmin):

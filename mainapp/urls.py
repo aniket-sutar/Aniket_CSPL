@@ -1,8 +1,8 @@
 from django.urls import path,include
-from .views import LoginView,RoleCreateView,RolesCRUD,PlacedOrderView,OrderHistory,BlogViewSet,DisplayProductByCategory
+from .views import LoginView,RoleCreateView,RolesCRUD,PlacedOrderView,OrderHistory,BlogViewSet,DisplayProductByCategory,OrderExcel
 from mainapp import views
 from rest_framework import routers
-
+from .views import ProductExcel,UploadProductExcel,UploadOrderExcel
 
 blog_router = routers.DefaultRouter()
 blog_router.register(r'blogs', BlogViewSet, basename='blog')
@@ -33,6 +33,7 @@ urlpatterns = [
     # path('tag-create/',Tagcreate.as_view(),name='tag-create'),
     # path('product-create/',ProductView.as_view(),name='product-create'),
     # path('product-update/<int:product_id>/',ProductView.as_view(),name='product-update'),
+
     path('update-team-members/',views.update_team_members,name='update-team-members'),
     path('alldata/',views.get_all_teams_and_members,name='alldata'),
 
@@ -40,7 +41,12 @@ urlpatterns = [
 
     path('place-order/',PlacedOrderView.as_view(),name='place-order'),
     path('order-history/',OrderHistory.as_view(),name='order-history'),
+    path('order-excel/',OrderExcel.as_view(),name='order-excel'),
+    path('exel-to-order/',UploadOrderExcel.as_view(),name='upload-order'),
 
     path('blog/',include(blog_router.urls)),
     path('parentchild/<int:id>/',DisplayProductByCategory.as_view(),name='parentchild'),
+
+    path('table-to-exel/',ProductExcel.as_view()),
+    path('exel-to-table/',UploadProductExcel.as_view()),
 ]

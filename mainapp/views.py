@@ -37,6 +37,16 @@ from rest_framework.pagination import PageNumberPagination
 import threading
 from .models import ParentChildCategory,ParentChildProduct
 from django.shortcuts import HttpResponse
+from openpyxl import Workbook
+import openpyxl
+from rest_framework.permissions import AllowAny
+from openpyxl.styles import Font, Alignment
+from django.utils.dateparse import parse_datetime
+from rest_framework.parsers import MultiPartParser, FormParser
+import pytz
+from datetime import datetime
+from dateutil import parser
+from django.utils.timezone import make_aware
 
 
 def Home(request):
@@ -64,15 +74,30 @@ class EmployeeView(ModelViewSet):
 
 class LoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
+        # Validate the data and check user credentials
         serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
-        token, created = Token.objects.get_or_create(user=user)
-        return Response({
-            'token': token.key,
-            'user_id': user.id,
-            'email': user.email
-        })
+        
+        # Check if user is a superuser
+        if user.is_superuser:
+            # Handle logic if the user is a superuser, like logging them in differently if needed
+            # For now, returning the token and user info as usual
+            token, created = Token.objects.get_or_create(user=user)
+            return Response({
+                'token': token.key,
+                'user_id': user.id,
+                'email': user.email,
+                'is_superuser': user.is_superuser  # Add superuser status
+            })
+        else:
+            # Regular user login logic
+            token, created = Token.objects.get_or_create(user=user)
+            return Response({
+                'token': token.key,
+                'user_id': user.id,
+                'email': user.email
+            })
 
 class RoleCreateView(APIView):
     def post(self, request):
@@ -82,7 +107,7 @@ class RoleCreateView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-# class SystemUserCreateView(APIView):
+class SystemUserCreateView(APIView):
     def post(self, request):
         serializer = SystemUserSerializer(data=request.data)
         if serializer.is_valid():
@@ -711,3 +736,195 @@ class DisplayProductByCategory(APIView):
             })
         except ParentChildCategory.DoesNotExist:
             return JsonResponse({"error": "Invalid category ID provided."}, status=404)
+        
+class OrderExcel(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = 'PlaceOrders'
+
+        headers = [
+            'Order ID', 'Customer Name', 'Customer Address', 'Product Name', 'Order Status',
+            'Amount', 'Quantity', 'Total Amount', 'Delivery Charges', 'Discount', 'Payment Type', 'Payment Date'
+        ]
+        sheet.append(headers)
+
+        orders = PlaceOrder.objects.all()
+
+        status_counts = {'Pending': 0,'PENDING':0, 'COMPLETED': 0, 'CANCELED': 0}
+        total_orders = 0
+
+        for order in orders:
+            total_orders += 1
+
+            # Update order status counts
+            if order.order_status in status_counts:
+                status_counts[order.order_status] += 1
+
+            # Format payment date
+            formatted_date = order.payment_date.strftime('%A, %d %B %Y, %I:%M%p')
+
+            sheet.append([
+                order.id,
+                order.cust_id.cust_name if order.cust_id else 'N/A',
+                order.cust_id.cust_address if order.cust_id else 'N/A',
+                order.prod_id.prod_name if order.prod_id else 'N/A',
+                order.order_status,
+                order.amount,
+                order.quantity,
+                order.total_amount,
+                order.delivery_charges,
+                order.discount,
+                order.payment_type,
+                formatted_date
+            ])
+
+        # Add footer information (total orders and order status counts)
+        sheet.append([])
+        sheet.append([f'Total Orders = {total_orders}'])
+        sheet.append([f'Pending Orders = {status_counts["Pending"] + status_counts["PENDING"]}'])
+        sheet.append([f'Completed Orders = {status_counts["COMPLETED"]}'])
+        sheet.append([f'Canceled Orders = {status_counts["CANCELED"]}'])
+
+        # Make header row bold
+        for cell in sheet["1:1"]:
+            cell.font = openpyxl.styles.Font(bold=True)
+
+        # Prepare the response to send the Excel file
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="placeorders.xlsx"'
+
+        workbook.save(response)
+        return response
+ 
+class ProductExcel(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = 'Products'
+
+        # Define headers
+        headers = ['Product ID', 'Product Name', 'Price', 'Description', 'Is Active']
+        sheet.append(headers)
+
+        products = Product.objects.all()
+
+        # Loop through the products and append each one to the sheet
+        for product in products:
+            sheet.append([
+                product.id,
+                product.prod_name,
+                product.price,
+                product.desc,
+                'Yes' if product.is_active else 'No'
+            ])
+
+        # Bold the header row
+        for cell in sheet["1:1"]:
+            cell.font = openpyxl.styles.Font(bold=True)
+
+        # Prepare the response to send the Excel file
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="products.xlsx"'
+
+        workbook.save(response)
+        return response
+
+class UploadProductExcel(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        excel_file = request.FILES.get('file')
+        if not excel_file:
+            return JsonResponse({"error": "No file uploaded"}, status=400)
+
+        # Load the Excel file
+        workbook = openpyxl.load_workbook(excel_file)
+        sheet = workbook.active
+
+        # Loop through rows starting from row 2 (after the header)
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            print("Processing row:", row)  # Debug: print each row
+
+            # Extract values from the row
+            product_name = row[1]  # Product Name
+            price = row[2]  # Price
+            description = row[3]  # Description
+            is_active = True if row[4].lower() == 'yes' else False  # Is Active
+
+            # Create a new Product record
+            Product.objects.create(
+                prod_name=product_name,
+                price=price,
+                desc=description,
+                is_active=is_active
+            )
+
+        return JsonResponse({"message": "Products successfully uploaded"}, status=200)
+    
+class UploadOrderExcel(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        excel_file = request.FILES.get('file')
+        if not excel_file:
+            return JsonResponse({"error": "No file uploaded"}, status=400)
+
+        try:
+            # Load the Excel workbook
+            workbook = openpyxl.load_workbook(excel_file)
+            sheet = workbook.active
+
+            for row in sheet.iter_rows(min_row=2, values_only=True):
+                customer_name = row[1]
+                customer_address = row[2]
+                product_name = row[3]
+                order_status = row[4].upper() if row[4] else 'PENDING'
+                amount = row[5]
+                quantity = row[6]
+                total_amount = row[7]
+                delivery_charges = row[8]
+                discount = row[9]
+                payment_type = row[10].upper() if row[10] else 'CASH'
+                payment_date_str = row[11]  # Keep raw payment date as string for debugging
+
+                try:
+                    # Explicit date parsing
+                    payment_date = parser.parse(payment_date_str)  # Automatically handles most formats
+                    payment_date = make_aware(payment_date)  # Make timezone-aware if settings.USE_TZ=True
+                except Exception as e:
+                    return JsonResponse({"error": f"Invalid date format: {str(e)}"}, status=400)
+
+                customer = Customer.objects.filter(cust_name=customer_name, cust_address=customer_address).first()
+                product = Product.objects.filter(prod_name=product_name).first()
+
+                if customer and product:
+                    PlaceOrder.objects.create(
+                        order_status=order_status,
+                        payment_type=payment_type,
+                        cust_id=customer,
+                        prod_id=product,
+                        quantity=quantity,
+                        amount=amount,
+                        total_amount=total_amount,
+                        delivery_charges=delivery_charges,
+                        discount=discount,
+                        payment_date=payment_date
+                    )
+
+            return JsonResponse({"message": "Orders successfully uploaded"}, status=200)
+
+        except Exception as e:
+            return JsonResponse({"error": f"Error processing file: {str(e)}"}, status=500)
